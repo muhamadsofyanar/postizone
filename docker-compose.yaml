@@ -1,0 +1,151 @@
+services:
+  postiz:
+    image: ghcr.io/gitroomhq/postiz-app:v2.26.0
+    environment:
+    - MAIN_URL=${PUBLIC_URL:?Set PUBLIC_URL}
+    - FRONTEND_URL=${PUBLIC_URL:?Set PUBLIC_URL}
+    - NEXT_PUBLIC_BACKEND_URL=${PUBLIC_URL:?Set PUBLIC_URL}/api
+    - JWT_SECRET=${JWTSECRET_SECRET:?Set JWTSECRET_SECRET}
+    - DATABASE_URL=postgresql://postgres:${POSTGRESQL_SECRET:?Set POSTGRESQL_SECRET}@postgres:5432/${POSTGRESQL_DATABASE:-postiz-db}
+    - REDIS_URL=redis://default:${REDIS_SECRET:?Set REDIS_SECRET}@redis:6379
+    - BACKEND_INTERNAL_URL=http://localhost:3000
+    - TEMPORAL_ADDRESS=temporal:7233
+    - DISABLE_REGISTRATION=${DISABLE_REGISTRATION:-false}
+    - STORAGE_PROVIDER=${STORAGE_PROVIDER:-local}
+    - UPLOAD_DIRECTORY=${UPLOAD_DIRECTORY:-/uploads}
+    - NEXT_PUBLIC_UPLOAD_DIRECTORY=${NEXT_PUBLIC_UPLOAD_DIRECTORY:-/uploads}
+    - IS_GENERAL=true
+    - TELEGRAM_TOKEN=${TELEGRAM_TOKEN:-}
+    - TELEGRAM_BOT_NAME=${TELEGRAM_BOT_NAME:-}
+    - INSTAGRAM_APP_ID=${INSTAGRAM_APP_ID:-}
+    - INSTAGRAM_APP_SECRET=${INSTAGRAM_APP_SECRET:-}
+    - THREADS_APP_ID=${THREADS_APP_ID:-}
+    - THREADS_APP_SECRET=${THREADS_APP_SECRET:-}
+    - LINKEDIN_CLIENT_ID=${LINKEDIN_CLIENT_ID:-}
+    - LINKEDIN_CLIENT_SECRET=${LINKEDIN_CLIENT_SECRET:-}
+    - TIKTOK_CLIENT_ID=${TIKTOK_CLIENT_ID:-}
+    - TIKTOK_CLIENT_SECRET=${TIKTOK_CLIENT_SECRET:-}
+    - YOUTUBE_CLIENT_ID=${YOUTUBE_CLIENT_ID:-}
+    - YOUTUBE_CLIENT_SECRET=${YOUTUBE_CLIENT_SECRET:-}
+    - X_API_KEY=${X_API_KEY:-}
+    - X_API_SECRET=${X_API_SECRET:-}
+    - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID:-}
+    - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET:-}
+    - DISCORD_BOT_TOKEN_ID=${DISCORD_BOT_TOKEN_ID:-}
+    - FACEBOOK_APP_ID=${FACEBOOK_APP_ID:-}
+    - FACEBOOK_APP_SECRET=${FACEBOOK_APP_SECRET:-}
+    - PINTEREST_CLIENT_ID=${PINTEREST_CLIENT_ID:-}
+    - PINTEREST_CLIENT_SECRET=${PINTEREST_CLIENT_SECRET:-}
+    volumes:
+    - postiz_config:/config/
+    - postiz_uploads:/uploads/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      temporal:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - node -e "fetch('http://127.0.0.1:5000/').then(r=>process.exit(r.status<500?0:1)).catch(()=>process.exit(1))"
+      interval: 5s
+      timeout: 20s
+      retries: 10
+    expose:
+    - '5000'
+    restart: unless-stopped
+  postgres:
+    image: postgres:17-alpine
+    volumes:
+    - postiz_postgresql_data:/var/lib/postgresql/data
+    environment:
+    - POSTGRES_USER=postgres
+    - POSTGRES_PASSWORD=${POSTGRESQL_SECRET:?Set POSTGRESQL_SECRET}
+    - POSTGRES_DB=${POSTGRESQL_DATABASE:-postiz-db}
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB:-postiz-db}
+      interval: 5s
+      timeout: 20s
+      retries: 10
+    restart: unless-stopped
+  temporal:
+    image: temporalio/auto-setup:1.28.1
+    environment:
+    - DB=postgres12
+    - DB_PORT=5432
+    - POSTGRES_USER=postgres
+    - POSTGRES_PWD=${POSTGRESQL_SECRET:?Set POSTGRESQL_SECRET}
+    - POSTGRES_SEEDS=postgres
+    - ENABLE_ES=true
+    - ES_SEEDS=temporal-elasticsearch
+    - ES_VERSION=v7
+    - TEMPORAL_NAMESPACE=default
+    depends_on:
+      postgres:
+        condition: service_healthy
+      temporal-elasticsearch:
+        condition: service_healthy
+    healthcheck:
+      test:
+      - CMD
+      - temporal
+      - operator
+      - cluster
+      - health
+      - --address
+      - temporal:7233
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+  temporal-elasticsearch:
+    image: elasticsearch:7.17.27
+    environment:
+    - cluster.routing.allocation.disk.threshold_enabled=true
+    - cluster.routing.allocation.disk.watermark.low=512mb
+    - cluster.routing.allocation.disk.watermark.high=256mb
+    - cluster.routing.allocation.disk.watermark.flood_stage=128mb
+    - discovery.type=single-node
+    - ES_JAVA_OPTS=-Xms256m -Xmx256m
+    - xpack.security.enabled=false
+    volumes:
+    - temporal_elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - curl -fsS 'http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=5s'
+        || exit 1
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+  redis:
+    image: redis:7.2
+    environment:
+    - REDIS_PASSWORD=${REDIS_SECRET:?Set REDIS_SECRET}
+    command: redis-server --requirepass ${REDIS_SECRET:?Set REDIS_SECRET}
+    volumes:
+    - postiz_redis_data:/data
+    healthcheck:
+      test:
+      - CMD
+      - redis-cli
+      - -a
+      - ${REDIS_SECRET:?Set REDIS_SECRET}
+      - ping
+      interval: 5s
+      timeout: 10s
+      retries: 20
+    restart: unless-stopped
+volumes:
+  postiz_config: {}
+  postiz_uploads: {}
+  postiz_postgresql_data: {}
+  temporal_elasticsearch_data: {}
+  postiz_redis_data: {}

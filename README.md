@@ -11,3 +11,5 @@ Paket deployment Postiz v2.26.0 berdasarkan https://github.com/coollabsio/coolif
 8. Pilih zona waktu Asia/Jakarta di kalender jika tersedia, jadwalkan satu post ke kanal uji beberapa menit ke depan, lalu verifikasi waktu dan isi di kanal tujuan.
 
 Jika halaman tidak terbuka, periksa DNS, domain service dan log postiz. Jika jadwal macet periksa log temporal, postgres dan temporal-elasticsearch. File unggahan dan database memakai named volume. Pertahankan volume saat redeploy, cadangkan sebelum upgrade. Kredensial diisi hanya melalui Coolify.
+
+Lihat PANDUAN-KANAL.md untuk variabel, callback dan pengujian tiap kanal. File coolify.env.example dapat disalin sebagai acuan pengisian variabel runtime. Simpan nilai asli di Coolify.
